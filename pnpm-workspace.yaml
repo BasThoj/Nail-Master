@@ -1,0 +1,5 @@
+﻿packages:
+  - 'api'
+  - 'admin-web'
+  - 'mobile'
+  - 'desktop'

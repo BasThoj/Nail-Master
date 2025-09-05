@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum StationStatus {
+  FREE
+  BUSY
+  CLEANING
+  MAINTENANCE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_SERVICE
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum OrderStatus {
+  OPEN
+  CHARGED
+  REFUNDED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  E_WALLET
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  fullName  String
+  role      UserRole @default(STAFF)
+  phone     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee  Employee?
+}
+
+model Employee {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  startDate     DateTime
+  active        Boolean  @default(true)
+  commissionPct Float    @default(0) // % hoa hồng
+  avatarUrl     String?
+
+  stationAssignments StationAssignment[]
+  timeEntries        TimeEntry[]
+  orders             Order[]        // đơn do NV thực hiện
+  bookings           Booking[]      @relation("BookingEmployee")
+}
+
+model Station {
+  id        String         @id @default(cuid())
+  name      String         @unique
+  status    StationStatus  @default(FREE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  assignments StationAssignment[]
+  orders  Order[]
+}
+
+model StationAssignment {
+  id         String   @id @default(cuid())
+  stationId  String
+  employeeId String
+  from       DateTime
+  to         DateTime?
+
+  station    Station  @relation(fields: [stationId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([stationId, employeeId, from])
+}
+
+model InventoryItem {
+  id          String   @id @default(cuid())
+  sku         String   @unique
+  name        String
+  unit        String    // chai, cái, hộp...
+  minStock    Int       @default(0)
+  quantity    Int       @default(0)
+  imageUrl    String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  txns InventoryTxn[]
+
+  serviceMaterials  ServiceMaterial[]
+}
+
+enum InventoryTxnType {
+  IMPORT
+  EXPORT
+  ADJUST
+  CONSUME  // tiêu hao theo dịch vụ
+}
+
+model InventoryTxn {
+  id          String           @id @default(cuid())
+  itemId      String
+  type        InventoryTxnType
+  quantity    Int
+  note        String?
+  createdAt   DateTime         @default(now())
+
+  item        InventoryItem    @relation(fields: [itemId], references: [id])
+
+  @@index([itemId, createdAt])
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  price       Int      // đơn vị: VND
+  durationMin Int      @default(30)
+  isActive    Boolean  @default(true)
+
+  materials ServiceMaterial[]
+  orderItems OrderItem[]
+  bookings  Booking[]
+}
+
+model ServiceMaterial {
+  id           String   @id @default(cuid())
+  serviceId    String
+  itemId       String
+  consumeQty   Int      // số lượng tiêu hao cho 1 lần dịch vụ
+
+  service      Service       @relation(fields: [serviceId], references: [id])
+  item         InventoryItem @relation(fields: [itemId], references: [id])
+  @@unique([serviceId, itemId])
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?  @unique
+  avatarUrl String?
+  createdAt DateTime @default(now())
+
+  bookings  Booking[]
+  orders    Order[]
+  ratings   Rating[]
+}
+
+model Booking {
+  id            String         @id @default(cuid())
+  customerId    String?
+  employeeId    String?
+  serviceId     String
+  startAt       DateTime
+  status        BookingStatus  @default(PENDING)
+  note          String?
+
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  employee      Employee?      @relation("BookingEmployee", fields: [employeeId], references: [id])
+  service       Service        @relation(fields: [serviceId], references: [id])
+
+  order         Order?
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  customerId    String?
+  employeeId    String?
+  stationId     String?
+  status        OrderStatus @default(OPEN)
+  subtotal      Int         @default(0)
+  discount      Int         @default(0)
+  total         Int         @default(0)
+  createdAt     DateTime    @default(now())
+
+  customer      Customer?   @relation(fields: [customerId], references: [id])
+  employee      Employee?   @relation(fields: [employeeId], references: [id])
+  station       Station?    @relation(fields: [stationId], references: [id])
+
+  items         OrderItem[]
+  payments      Payment[]
+  media         Media[]
+  rating        Rating?
+  bookings  Booking[]
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  serviceId  String
+  price      Int
+  quantity   Int      @default(1)
+  note       String?
+
+  order      Order    @relation(fields: [orderId], references: [id])
+  service    Service  @relation(fields: [serviceId], references: [id])
+}
+
+model Payment {
+  id         String         @id @default(cuid())
+  orderId    String
+  method     PaymentMethod
+  amount     Int
+  paidAt     DateTime       @default(now())
+  txnRef     String?
+
+  order      Order          @relation(fields: [orderId], references: [id])
+}
+
+model Media {
+  id         String   @id @default(cuid())
+  orderId    String
+  url        String
+  type       String    // image/video
+  createdAt  DateTime  @default(now())
+
+  order      Order     @relation(fields: [orderId], references: [id])
+}
+
+model Rating {
+  id         String   @id @default(cuid())
+  orderId    String   @unique
+  stars      Int      // 1..5
+  comment    String?
+
+  order      Order    @relation(fields: [orderId], references: [id])
+
+  customer    Customer @relation(fields: [customerId], references: [id])
+  customerId  String
+}
+
+model TimeEntry {
+  id         String   @id @default(cuid())
+  employeeId String
+  checkIn    DateTime
+  checkOut   DateTime?
+
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  @@index([employeeId, checkIn])
+}

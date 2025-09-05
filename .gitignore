@@ -1,0 +1,9 @@
+﻿node_modules
+dist
+.build
+.tmp
+coverage
+.env
+.env.*
+.DS_Store
+Thumbs.db
