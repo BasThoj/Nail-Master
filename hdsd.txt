@@ -1,0 +1,10 @@
+startcode
+git pull
+pnpm install
+
+
+endcode
+git add .
+git commit -m "feat: <nội dung>"
+git push
+
